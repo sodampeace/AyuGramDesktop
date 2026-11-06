@@ -9221,6 +9221,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_LocalSearchBackfillStop" = "Stop downloading history";
 "ayu_LocalSearchBackfillStarted" = "Downloading this chat's history in the background. You can keep using Telegram.";
 "ayu_LocalSearchBackfillDone" = "Saved {item} messages for search.";
+"ayu_LocalSearchFolderStarted#one" = "Downloading the history of {count} chat in the background.";
+"ayu_LocalSearchFolderStarted#other" = "Downloading the history of {count} chats one by one in the background.";
 "ayu_ExcludedDeletedButton" = "Chats that don't save deleted messages";
 "ayu_ExcludedDeletedTitle" = "Don't save deleted messages";
 "ayu_LocalSearchHeader" = "Korean search";

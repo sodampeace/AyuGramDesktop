@@ -53,6 +53,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // AyuGram includes
 #include "ayu/ayu_settings.h"
 #include "ayu/features/hidden_folders/hidden_folders.h"
+#include "ayu/features/local_search/local_search.h"
+#include "history/history.h"
 
 
 namespace Window {
@@ -808,6 +810,46 @@ void FiltersMenu::showMenu(QPoint position, FilterId id) {
 			addAction);
 
 		AyuFeatures::HiddenFolders::AddToggleAction(addAction, id);
+
+		// AyuGram: download every chat of this folder for Korean search.
+		if (AyuLocalSearch::BackfillManyRunning()) {
+			addAction(
+				tr::ayu_LocalSearchBackfillStop(tr::now),
+				[] { AyuLocalSearch::CancelBackfillMany(); },
+				&st::menuIconSearch);
+		} else {
+			const auto controller = _session;
+			addAction(
+				tr::ayu_LocalSearchBackfill(tr::now),
+				crl::guard(&_outer, [=] {
+					auto peers = std::vector<not_null<PeerData*>>();
+					const auto list = controller->session().data(
+						).chatsFilters().chatsList(id);
+					for (const auto &entry : *list->indexed()) {
+						if (const auto history = entry->history()) {
+							peers.push_back(history->peer);
+						}
+					}
+					controller->showToast(tr::ayu_LocalSearchFolderStarted(
+						tr::now,
+						lt_count,
+						int(peers.size())));
+					const auto weak = base::make_weak(controller);
+					AyuLocalSearch::BackfillMany(
+						&controller->session(),
+						std::move(peers),
+						[=](int messages) {
+							if (const auto strong = weak.get()) {
+								strong->showToast(
+									tr::ayu_LocalSearchBackfillDone(
+										tr::now,
+										lt_item,
+										QString::number(messages)));
+							}
+						});
+				}),
+				&st::menuIconSearch);
+		}
 
 		addAction({
 			.text = tr::lng_filters_context_remove(tr::now),

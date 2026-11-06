@@ -442,7 +442,8 @@ private:
 		std::vector<not_null<HistoryItem*>> messages,
 		HistoryItem *inject,
 		int fullCount,
-		not_null<SearchProcessState*> process);
+		not_null<SearchProcessState*> process,
+		bool searched = false);
 	LocalSearch _localSearch;
 	PeerData *_searchQueryFrom = nullptr;
 	std::vector<Data::ReactionId> _searchQueryTags;

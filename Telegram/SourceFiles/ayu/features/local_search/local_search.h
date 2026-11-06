@@ -36,11 +36,13 @@ void IndexRaw(
 	const QString &text);
 
 // Newest first. `inPeer` empty means all chats of this account.
-[[nodiscard]] std::vector<Result> Search(
+// Runs off the main thread; `done` is called on the main thread.
+void Search(
 	not_null<Main::Session*> session,
 	const QString &query,
 	PeerId inPeer,
-	int limit);
+	int limit,
+	Fn<void(std::vector<Result>)> done);
 
 // Downloads the whole history of a chat into the index, slowly, in the
 // background. Calls `progress(indexed)` after every page, `done` at the end.
@@ -50,5 +52,14 @@ void Backfill(
 	Fn<void()> done);
 [[nodiscard]] bool BackfillRunning(not_null<PeerData*> peer);
 void CancelBackfill(not_null<PeerData*> peer);
+
+// Backfills a list of chats (e.g. a whole folder) one after another, so the
+// server sees a single slow download. `done(messages)` at the end.
+void BackfillMany(
+	not_null<Main::Session*> session,
+	std::vector<not_null<PeerData*>> peers,
+	Fn<void(int)> done);
+[[nodiscard]] bool BackfillManyRunning();
+void CancelBackfillMany();
 
 } // namespace AyuLocalSearch

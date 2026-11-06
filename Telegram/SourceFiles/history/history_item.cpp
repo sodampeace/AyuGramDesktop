@@ -3200,6 +3200,7 @@ void HistoryItem::setRealId(MsgId newId) {
 	if (out() && starsPaid()) {
 		_history->session().credits().load(true);
 	}
+	AyuLocalSearch::Index(this); // Sent messages only now get a server id.
 }
 
 bool HistoryItem::canPin() const {

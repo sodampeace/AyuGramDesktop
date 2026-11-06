@@ -5,6 +5,7 @@
 
 #include "apiwrap.h"
 #include "base/timer.h"
+#include "base/weak_ptr.h"
 #include "base/unixtime.h"
 #include "core/application.h"
 #include "data/data_changes.h"
@@ -61,7 +62,8 @@ struct Task {
 		QStandardPaths::GenericDataLocation) + u"/EtaBar/tasks.json"_q;
 }
 
-class Watcher final {
+// Replies may come after an account switch destroyed us; guard them.
+class Watcher final : public base::has_weak_ptr {
 public:
 	Watcher(not_null<Main::Session*> session, PeerId chat);
 
@@ -113,7 +115,19 @@ bool Watcher::isEtaItem(not_null<const HistoryItem*> item) const {
 	return from->isUser() && from->asUser()->isBot();
 }
 
+// eta starts a running task with ⏳ (or ⏸ while paused) and edits it to
+// ✅ / ❌ when it ends. Only running ones are tasks; results and questions
+// the bot leaves in the chat are not.
+[[nodiscard]] bool IsRunning(const QString &text) {
+	return text.startsWith(QString::fromUtf8("\u23F3"))
+		|| text.startsWith(QString::fromUtf8("\u23F8"));
+}
+
 void Watcher::upsert(not_null<HistoryItem*> item) {
+	if (!IsRunning(item->originalText().text)) {
+		remove(item->id);
+		return;
+	}
 	auto &task = _tasks[item->id];
 	task.text = item->originalText().text;
 	task.date = item->date();
@@ -155,7 +169,7 @@ void Watcher::requestRecent() {
 		MTP_int(0), // max_id
 		MTP_int(0), // min_id
 		MTP_long(0) // hash
-	)).done([=](const MTPmessages_Messages &result) {
+	)).done(crl::guard(this, [=](const MTPmessages_Messages &result) {
 		_requestId = 0;
 		const auto data = &_session->data();
 		data->processExistingMessages(peer->asChannel(), result);
@@ -165,7 +179,8 @@ void Watcher::requestRecent() {
 			for (const auto &message : list.vmessages().v) {
 				const auto id = IdFromMessage(message);
 				if (const auto item = data->message(_chat, id)) {
-					if (isEtaItem(item)) {
+					if (isEtaItem(item)
+						&& IsRunning(item->originalText().text)) {
 						alive.emplace(id);
 						upsert(item);
 					}
@@ -179,9 +194,9 @@ void Watcher::requestRecent() {
 			_refresh.cancel();
 		}
 		write();
-	}).fail([=] {
+	})).fail(crl::guard(this, [=] {
 		_requestId = 0;
-	}).send();
+	})).send();
 }
 
 void Watcher::write() {

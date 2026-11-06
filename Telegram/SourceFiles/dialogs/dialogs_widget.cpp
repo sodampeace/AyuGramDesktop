@@ -3858,7 +3858,15 @@ void Widget::searchReceived(
 	if (!type.posts
 		&& !type.migrated
 		&& AyuLocalSearch::Wanted(_searchQuery)
-		&& (type.peer || _searchState.tab == ChatSearchTab::MyMessages)) {
+		// The local index knows only chat, date and text, so skip it when
+		// the search is narrowed by sender, tags, topic, sublist or type.
+		&& !_searchQueryFrom
+		&& _searchQueryTags.empty()
+		&& !searchInTopic()
+		&& !_searchState.inChat.sublist()
+		&& (type.peer
+			|| (_searchState.tab == ChatSearchTab::MyMessages
+				&& _searchQueryFilter == ChatTypeFilter::All))) {
 		mergeLocalSearchResults(
 			type,
 			std::move(messages),
@@ -3882,23 +3890,57 @@ void Widget::mergeLocalSearchResults(
 		std::vector<not_null<HistoryItem*>> messages,
 		HistoryItem *inject,
 		int fullCount,
-		not_null<SearchProcessState*> process) {
+		not_null<SearchProcessState*> process,
+		bool searched) {
 	constexpr auto kLocalLimit = 300;
 	const auto inPeer = searchInPeer();
 	const auto inPeerId = inPeer ? inPeer->id : PeerId();
 	auto &local = _localSearch;
-	if (type.start
-		|| local.query != _searchQuery
-		|| local.inPeer != inPeerId) {
+	if (!searched
+		&& (type.start
+			|| local.query != _searchQuery
+			|| local.inPeer != inPeerId)) {
 		local.query = _searchQuery;
 		local.inPeer = inPeerId;
-		local.pending = AyuLocalSearch::Search(
+		local.pending.clear();
+		local.shown.clear();
+		const auto generation = ++local.generation;
+		// The index is queried on a worker thread; hold this page until
+		// it answers, then come back here with the results in place.
+		auto serverIds = std::vector<FullMsgId>();
+		serverIds.reserve(messages.size());
+		for (const auto &item : messages) {
+			serverIds.push_back(item->fullId());
+		}
+		const auto injectId = inject ? inject->fullId() : FullMsgId();
+		process->requestId = process->requestId ? process->requestId : -1;
+		AyuLocalSearch::Search(
 			&session(),
 			_searchQuery,
 			inPeerId,
-			kLocalLimit);
-		local.shown.clear();
-		++local.generation;
+			kLocalLimit,
+			crl::guard(this, [=](std::vector<AyuLocalSearch::Result> found) {
+				if (_localSearch.generation != generation
+					|| _searchQuery != _localSearch.query) {
+					return;
+				}
+				_localSearch.pending = std::move(found);
+				auto &data = session().data();
+				auto messages = std::vector<not_null<HistoryItem*>>();
+				for (const auto &id : serverIds) {
+					if (const auto item = data.message(id)) {
+						messages.push_back(item);
+					}
+				}
+				mergeLocalSearchResults(
+					type,
+					std::move(messages),
+					injectId ? data.message(injectId) : nullptr,
+					fullCount,
+					process,
+					true);
+			}));
+		return;
 	}
 	for (const auto &item : messages) {
 		local.shown.emplace(item->fullId());
@@ -3920,14 +3962,30 @@ void Widget::mergeLocalSearchResults(
 		}
 	}
 	const auto generation = local.generation;
-	auto deliver = [=, messages = std::move(messages)]() mutable {
+	// Keep ids, not pointers: items may be destroyed while we wait.
+	auto serverIds = std::vector<FullMsgId>();
+	serverIds.reserve(messages.size());
+	for (const auto &item : messages) {
+		serverIds.push_back(item->fullId());
+	}
+	const auto injectId = inject ? inject->fullId() : FullMsgId();
+	const auto deliver = [=] {
 		if (_localSearch.generation != generation
 			|| _searchQuery != _localSearch.query) {
 			return;
 		}
+		auto &data = session().data();
+		auto messages = std::vector<not_null<HistoryItem*>>();
+		messages.reserve(serverIds.size() + take.size());
+		for (const auto &id : serverIds) {
+			if (const auto item = data.message(id)) {
+				messages.push_back(item);
+			}
+		}
+		const auto inject = injectId ? data.message(injectId) : nullptr;
 		auto added = 0;
 		for (const auto &id : take) {
-			if (const auto item = session().data().message(id)) {
+			if (const auto item = data.message(id)) {
 				messages.push_back(item);
 				++added;
 			}
@@ -5145,6 +5203,7 @@ void Widget::scrollToEntry(const RowDescriptor &entry) {
 }
 
 void Widget::cancelSearchRequest() {
+	++_localSearch.generation; // Drop local results still waiting to show.
 	session().api().request(base::take(_searchProcess.requestId)).cancel();
 	session().api().request(base::take(_migratedProcess.requestId)).cancel();
 	session().api().request(base::take(_postsProcess.requestId)).cancel();

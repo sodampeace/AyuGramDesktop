@@ -5,6 +5,7 @@
 #include "apiwrap.h"
 #include "ayu/ayu_settings.h"
 #include "base/timer.h"
+#include "data/data_media_types.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
 #include "history/history.h"
@@ -12,6 +13,8 @@
 #include "main/main_session.h"
 #include "settings.h"
 #include "ui/text/text_entity.h"
+
+#include <QtCore/QCoreApplication>
 
 namespace AyuLocalSearch {
 namespace {
@@ -61,62 +64,27 @@ public:
 		}
 	}
 
-	std::vector<Result> search(
-			int64 account,
-			const QStringList &words,
-			int64 inPeer,
-			int limit) {
+	// Writes queued rows so a search right after sees them.
+	void flushNow() {
 		flush();
-		auto result = std::vector<Result>();
-		if (!_db || words.isEmpty()) {
-			return result;
-		}
-		auto sql = QByteArray("SELECT peer, id, date FROM messages"
-			" WHERE account = ?");
-		if (inPeer) {
-			sql += " AND peer = ?";
-		}
-		for (auto i = 0; i != words.size(); ++i) {
-			sql += " AND instr(norm, ?) > 0";
-		}
-		sql += " ORDER BY date DESC LIMIT ?";
-		sqlite3_stmt *statement = nullptr;
-		if (sqlite3_prepare_v2(_db, sql.constData(), -1, &statement, nullptr)
-			!= SQLITE_OK) {
-			return result;
-		}
-		auto index = 1;
-		sqlite3_bind_int64(statement, index++, account);
-		if (inPeer) {
-			sqlite3_bind_int64(statement, index++, inPeer);
-		}
-		auto keep = std::vector<QByteArray>();
-		keep.reserve(words.size());
-		for (const auto &word : words) {
-			keep.push_back(word.toUtf8());
-			sqlite3_bind_text(
-				statement,
-				index++,
-				keep.back().constData(),
-				keep.back().size(),
-				SQLITE_STATIC);
-		}
-		sqlite3_bind_int(statement, index++, limit);
-		while (sqlite3_step(statement) == SQLITE_ROW) {
-			result.push_back({
-				.id = FullMsgId(
-					PeerId(PeerIdHelper(sqlite3_column_int64(statement, 0))),
-					MsgId(sqlite3_column_int64(statement, 1))),
-				.date = TimeId(sqlite3_column_int64(statement, 2)),
-			});
-		}
-		sqlite3_finalize(statement);
-		return result;
+	}
+
+	[[nodiscard]] bool opened() const {
+		return _db != nullptr;
+	}
+
+	[[nodiscard]] static QByteArray Path() {
+		return (cWorkingDir() + u"tdata/ayu_search.db"_q).toUtf8();
 	}
 
 private:
 	Database() : _flush([=] { flush(); }) {
-		const auto path = (cWorkingDir() + u"tdata/ayu_search.db"_q).toUtf8();
+		// Write the last second of messages before the app goes away.
+		QObject::connect(
+			QCoreApplication::instance(),
+			&QCoreApplication::aboutToQuit,
+			[=] { flush(); });
+		const auto path = Path();
 		if (sqlite3_open(path.constData(), &_db) != SQLITE_OK) {
 			LOG(("Local search: could not open %1").arg(QString::fromUtf8(path)));
 			sqlite3_close(_db);
@@ -179,6 +147,60 @@ private:
 	std::vector<Pending> _pending;
 	base::Timer _flush;
 };
+
+// Runs on a worker thread with its own read connection (WAL allows it).
+std::vector<Result> RunSearch(
+		sqlite3 *db,
+		int64 account,
+		const QStringList &words,
+		int64 inPeer,
+		int limit) {
+	auto result = std::vector<Result>();
+	if (!db || words.isEmpty()) {
+		return result;
+	}
+	auto sql = QByteArray("SELECT peer, id, date FROM messages"
+		" WHERE account = ?");
+	if (inPeer) {
+		sql += " AND peer = ?";
+	}
+	for (auto i = 0; i != words.size(); ++i) {
+		sql += " AND instr(norm, ?) > 0";
+	}
+	sql += " ORDER BY date DESC LIMIT ?";
+	sqlite3_stmt *statement = nullptr;
+	if (sqlite3_prepare_v2(db, sql.constData(), -1, &statement, nullptr)
+		!= SQLITE_OK) {
+		return result;
+	}
+	auto index = 1;
+	sqlite3_bind_int64(statement, index++, account);
+	if (inPeer) {
+		sqlite3_bind_int64(statement, index++, inPeer);
+	}
+	auto keep = std::vector<QByteArray>();
+	keep.reserve(words.size());
+	for (const auto &word : words) {
+		keep.push_back(word.toUtf8());
+		sqlite3_bind_text(
+			statement,
+			index++,
+			keep.back().constData(),
+			keep.back().size(),
+			SQLITE_STATIC);
+	}
+	sqlite3_bind_int(statement, index++, limit);
+	while (sqlite3_step(statement) == SQLITE_ROW) {
+		result.push_back({
+			.id = FullMsgId(
+				PeerId(PeerIdHelper(sqlite3_column_int64(statement, 0))),
+				MsgId(sqlite3_column_int64(statement, 1))),
+			.date = TimeId(sqlite3_column_int64(statement, 2)),
+		});
+	}
+	sqlite3_finalize(statement);
+	return result;
+}
 
 // Same form as getDialogIdFromPeer: users positive, groups and channels negative.
 [[nodiscard]] int64 DialogId(PeerId peer) {
@@ -267,8 +289,10 @@ void BackfillNext(not_null<PeerData*> peer) {
 	}).fail([=](const MTP::Error &error) {
 		state->requestId = 0;
 		// FLOOD_WAIT and friends: wait and try the same page again.
-		if (error.type().startsWith(u"FLOOD_WAIT_"_q)) {
-			const auto seconds = error.type().mid(11).toInt();
+		const auto type = error.type();
+		if (type.startsWith(u"FLOOD_WAIT_"_q)
+			|| type.startsWith(u"FLOOD_PREMIUM_WAIT_"_q)) {
+			const auto seconds = type.mid(type.lastIndexOf('_') + 1).toInt();
 			state->timer.callOnce(std::max(
 				kBackfillFloodPause,
 				crl::time(seconds + 1) * 1000));
@@ -321,7 +345,10 @@ void IndexRaw(
 }
 
 void Index(not_null<HistoryItem*> item) {
-	if (!item->isRegular()) {
+	// Self-destructing messages are meant to disappear; don't keep them.
+	if (!item->isRegular()
+		|| item->ttlDestroyAt()
+		|| (item->media() && item->media()->ttlSeconds())) {
 		return;
 	}
 	IndexRaw(
@@ -332,25 +359,48 @@ void Index(not_null<HistoryItem*> item) {
 		item->originalText().text);
 }
 
-std::vector<Result> Search(
+void Search(
 		not_null<Main::Session*> session,
 		const QString &query,
 		PeerId inPeer,
-		int limit) {
-	return Database::Instance().search(
-		int64(session->userId().bare),
-		TextUtilities::PrepareSearchWords(query),
-		int64(inPeer.value),
-		limit);
+		int limit,
+		Fn<void(std::vector<Result>)> done) {
+	auto &database = Database::Instance();
+	if (!database.opened()) {
+		done({});
+		return;
+	}
+	database.flushNow();
+	const auto account = int64(session->userId().bare);
+	const auto words = TextUtilities::PrepareSearchWords(query);
+	const auto peer = int64(inPeer.value);
+	const auto path = Database::Path();
+	crl::async([=] {
+		sqlite3 *db = nullptr;
+		const auto flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX;
+		auto result = std::vector<Result>();
+		if (sqlite3_open_v2(path.constData(), &db, flags, nullptr)
+			== SQLITE_OK) {
+			result = RunSearch(db, account, words, peer, limit);
+		}
+		sqlite3_close(db);
+		crl::on_main([=, result = std::move(result)]() mutable {
+			done(std::move(result));
+		});
+	});
 }
+
+void ContinueManyAfter(not_null<PeerData*> peer);
 
 void Backfill(
 		not_null<PeerData*> peer,
 		Fn<void(int)> progress,
 		Fn<void()> done) {
-	if (Backfills.contains(peer)) {
+	if (Backfills.contains(peer) || Excluded(peer->id)) {
 		return;
 	}
+	// The session (and the peer with it) can go away mid-download.
+	peer->session().lifetime().add([=] { Backfills.erase(peer); });
 	auto state = std::make_unique<BackfillState>(peer);
 	state->progress = std::move(progress);
 	state->done = std::move(done);
@@ -372,6 +422,88 @@ void CancelBackfill(not_null<PeerData*> peer) {
 		peer->session().api().request(i->second->requestId).cancel();
 	}
 	Backfills.erase(i);
+	ContinueManyAfter(peer); // A folder download moves on to the next chat.
+}
+
+namespace {
+
+struct ManyState {
+	not_null<Main::Session*> session;
+	std::vector<not_null<PeerData*>> left;
+	PeerData *current = nullptr;
+	int messages = 0;
+	int currentCount = 0;
+	Fn<void(int)> done;
+};
+
+std::unique_ptr<ManyState> Many;
+
+void BackfillManyNext() {
+	if (!Many) {
+		return;
+	}
+	Many->messages += base::take(Many->currentCount);
+	Many->current = nullptr;
+	while (!Many->left.empty()) {
+		const auto peer = Many->left.front();
+		Many->left.erase(Many->left.begin());
+		if (Excluded(peer->id) || BackfillRunning(peer)) {
+			continue;
+		}
+		Many->current = peer;
+		Backfill(peer, [](int indexed) {
+			if (Many) {
+				Many->currentCount = indexed;
+			}
+		}, [] {
+			BackfillManyNext();
+		});
+		return;
+	}
+	const auto state = std::move(Many);
+	if (state->done) {
+		state->done(state->messages);
+	}
+}
+
+} // namespace
+
+void ContinueManyAfter(not_null<PeerData*> peer) {
+	if (Many && Many->current == peer.get()) {
+		BackfillManyNext();
+	}
+}
+
+void BackfillMany(
+		not_null<Main::Session*> session,
+		std::vector<not_null<PeerData*>> peers,
+		Fn<void(int)> done) {
+	if (Many) {
+		return;
+	}
+	Many = std::make_unique<ManyState>(ManyState{
+		.session = session,
+		.left = std::move(peers),
+		.done = std::move(done),
+	});
+	session->lifetime().add([=] {
+		if (Many && Many->session == session) {
+			Many = nullptr;
+		}
+	});
+	BackfillManyNext();
+}
+
+bool BackfillManyRunning() {
+	return Many != nullptr;
+}
+
+void CancelBackfillMany() {
+	if (const auto state = base::take(Many)) {
+		if (const auto peer = state->current) {
+			CancelBackfill(peer);
+		}
+	}
 }
 
 } // namespace AyuLocalSearch
