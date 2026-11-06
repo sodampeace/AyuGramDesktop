@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "dialogs/dialogs_row.h"
 
+#include "ayu/ayu_settings.h"
 #include "ui/chat/chat_theme.h" // CountAverageColor.
 #include "ui/color_contrast.h"
 #include "ui/effects/credits_graphics.h"
@@ -420,6 +421,9 @@ Row::~Row() {
 const style::DialogRow &Row::ComputeSt(
 		not_null<const Entry*> entry,
 		FilterId filterId) {
+	if (AyuSettings::getInstance().chatListCompact()) {
+		return st::compactDialogRow;
+	}
 	if (const auto history = entry->asHistory()) {
 		const auto hasTags = entry->hasChatsFilterTags(filterId);
 		const auto wideRow = history->peer->displayAsForum()
@@ -437,7 +441,9 @@ const style::DialogRow &Row::ComputeSt(
 
 void Row::recountHeight(float64 narrowRatio, FilterId filterId) {
 	const auto &st = ComputeSt(_id.entry(), filterId);
-	_height = ((&st == &st::defaultDialogRow) || !_id.history())
+	_height = (&st == &st::compactDialogRow)
+		? st::compactDialogRow.height
+		: ((&st == &st::defaultDialogRow) || !_id.history())
 		? st::defaultDialogRow.height
 		: anim::interpolate(
 			st.height,
@@ -483,6 +489,9 @@ void Row::updateCornerBadgeShown(
 	const auto now = user ? base::unixtime::now() : TimeId();
 	const auto channel = user ? nullptr : peer->asChannel();
 	const auto nextLayer = [&] {
+		if (AyuSettings::getInstance().chatListCompact()) {
+			return kNoneLayer;
+		}
 		if (hasUnreadBadgesAbove) {
 			return kNoneLayer;
 		} else if (user
@@ -806,7 +815,9 @@ void Row::paintUserpic(
 	const auto limit = Ui::kOutlineSegmentsMax;
 	const auto storiesCount = std::min(storiesCountReal, limit);
 	const auto storiesUnreadCount = std::min(storiesUnreadCountReal, limit);
-	if (_cornerBadgeUserpic->frame.size() != frameSize) {
+	const auto frameSizeChanged
+		= (_cornerBadgeUserpic->frame.size() != frameSize);
+	if (frameSizeChanged) {
 		_cornerBadgeUserpic->frame = QImage(
 			frameSize,
 			QImage::Format_ARGB32_Premultiplied);
@@ -839,6 +850,7 @@ void Row::paintUserpic(
 	const auto activeMatters = storiesCount
 		|| !(subscribed || communityMember);
 	if (keyChanged
+		|| frameSizeChanged
 		|| !_cornerBadgeUserpic->layersManager.isFinished()
 		|| (activeMatters && activeChanged)
 		|| _cornerBadgeUserpic->hidden != (hidden ? 1 : 0)
