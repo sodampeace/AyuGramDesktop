@@ -10,6 +10,7 @@
 #include "tray.h"
 #include "ayu/ayu_ui_settings.h"
 #include "ayu/ayu_worker.h"
+#include "ayu/mcp/mcp_server.h"
 #include "ayu/features/streamer_mode/streamer_mode.h"
 #include "ayu/ui/ayu_logo.h"
 #include "core/application.h"
@@ -564,6 +565,13 @@ void AyuSettings::setSaveForBots(bool val) {
 	save();
 }
 
+void AyuSettings::setMcpEnabled(bool val) {
+	if (_mcpEnabled.current() == val) return;
+	_mcpEnabled = val;
+	save();
+	AyuMcp::applySettings(true);
+}
+
 void AyuSettings::setFiltersEnabled(bool val) {
 	if (_filtersEnabled.current() == val) return;
 	_filtersEnabled = val;
@@ -1095,6 +1103,7 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		{"saveDeletedMessages", s._saveDeletedMessages.current()},
 		{"saveMessagesHistory", s._saveMessagesHistory.current()},
 		{"saveForBots", s._saveForBots.current()},
+		{"mcpEnabled", s._mcpEnabled.current()},
 		{"shadowBanIds", s._shadowBanIds},
 		{"hiddenFolderIds", s._hiddenFolderIds},
 		{"filtersEnabled", s._filtersEnabled.current()},
@@ -1200,6 +1209,7 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 	s._saveDeletedMessages = j.value("saveDeletedMessages", defaults._saveDeletedMessages.current());
 	s._saveMessagesHistory = j.value("saveMessagesHistory", defaults._saveMessagesHistory.current());
 	s._saveForBots = j.value("saveForBots", defaults._saveForBots.current());
+	s._mcpEnabled = j.value("mcpEnabled", defaults._mcpEnabled.current());
 	s._shadowBanIds = j.value("shadowBanIds", defaults._shadowBanIds);
 	s._hiddenFolderIds = j.value("hiddenFolderIds", defaults._hiddenFolderIds);
 	s._filtersEnabled = j.value("filtersEnabled", defaults._filtersEnabled.current());
