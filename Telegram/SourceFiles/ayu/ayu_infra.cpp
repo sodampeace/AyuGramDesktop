@@ -58,6 +58,7 @@ void initTranslator() {
 
 void initMcp() {
 	AyuMcp::registerChatTools();
+	AyuMcp::registerSearchTools();
 	AyuMcp::applySettings();
 }
 

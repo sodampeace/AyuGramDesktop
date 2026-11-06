@@ -60,6 +60,14 @@ void BackfillMany(
 	std::vector<not_null<PeerData*>> peers,
 	Fn<void(int)> done);
 [[nodiscard]] bool BackfillManyRunning();
+
+struct ManyStatus {
+	bool running = false;
+	int chatsLeft = 0;
+	QString currentChat;
+	int messages = 0; // Saved by this run so far.
+};
+[[nodiscard]] ManyStatus BackfillManyStatus();
 void CancelBackfillMany();
 
 } // namespace AyuLocalSearch

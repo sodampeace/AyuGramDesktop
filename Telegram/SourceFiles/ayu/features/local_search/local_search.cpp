@@ -591,6 +591,18 @@ bool BackfillManyRunning() {
 	return Many != nullptr;
 }
 
+ManyStatus BackfillManyStatus() {
+	if (!Many) {
+		return {};
+	}
+	return {
+		.running = true,
+		.chatsLeft = int(Many->left.size()),
+		.currentChat = Many->current ? Many->current->name() : QString(),
+		.messages = Many->messages + Many->currentCount,
+	};
+}
+
 void CancelBackfillMany() {
 	if (const auto state = base::take(Many)) {
 		if (const auto peer = state->current) {

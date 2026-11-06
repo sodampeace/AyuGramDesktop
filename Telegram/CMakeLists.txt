@@ -337,6 +337,7 @@ PRIVATE
         ayu/mcp/mcp_server.h
         ayu/mcp/tools/mcp_tools.h
         ayu/mcp/tools/mcp_tools_chats.cpp
+        ayu/mcp/tools/mcp_tools_search.cpp
 
         info/profile/info_profile_music_button.cpp
         info/profile/info_profile_music_button.h
