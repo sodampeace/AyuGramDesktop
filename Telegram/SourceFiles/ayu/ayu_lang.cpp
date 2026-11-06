@@ -224,6 +224,17 @@ void AyuLanguage::applyLanguageJson(QJsonDocument doc) {
 		Lang::GetInstance().resetValue(key.toUtf8());
 		Lang::GetInstance().applyValue(key.toUtf8(), val.toUtf8());
 	}
+	// Fixes for Telegram's own strings in the cloud language pack
+	// (e.g. Korean dates written in English order).
+	QFile fixes(u":/gui/langs/ayu/%1_tdesktop.json"_q.arg(_currentLangId));
+	if (!_currentLangId.isEmpty() && fixes.open(QIODevice::ReadOnly)) {
+		const auto object = QJsonDocument::fromJson(fixes.readAll()).object();
+		for (auto i = object.begin(); i != object.end(); ++i) {
+			const auto key = i.key().toUtf8();
+			Lang::GetInstance().resetValue(key);
+			Lang::GetInstance().applyValue(key, i.value().toString().toUtf8());
+		}
+	}
 	Lang::GetInstance().updatePluralRules();
 	if (!_applying) {
 		_applying = true;

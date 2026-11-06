@@ -3938,6 +3938,18 @@ TextSelection FindSearchQueryHighlight(
 		}
 		return tillEndOfWord(offset);
 	}
+	// AyuGram: local search matches inside words ("여울이" in "서여울이"),
+	// so highlight the matched part there too.
+	if (!lower.isEmpty()) {
+		if (const auto from = inside.indexOf(lower); from >= 0) {
+			return { uint16(from), uint16(from + lower.size()) };
+		}
+		for (const auto &word : words) {
+			if (const auto from = inside.indexOf(word); from >= 0) {
+				return { uint16(from), uint16(from + word.size()) };
+			}
+		}
+	}
 	return {};
 }
 

@@ -1,0 +1,8 @@
+{
+  "lng_month_day_year": "{year}년 {month} {day}일",
+  "lng_stats_day_month": "{month} {days_count}일",
+  "lng_stats_day_month_year": "{year}년 {month} {days_count}일",
+  "lng_stats_weekday_day_month_time": "{month} {days_count}일 ({day}) {time}",
+  "lng_stats_weekday_day_month_year": "{year}년 {month} {days_count}일 ({day})",
+  "lng_sponsored_info_submenu": "광고주: {text}"
+}
