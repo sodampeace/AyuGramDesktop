@@ -1473,7 +1473,9 @@ void ApiWrap::markContentsRead(
 			continue;
 		}
 
-		if (!ghost.sendReadMessages() && !passthrough) {
+		if (!ghost.shouldSendReadMessages(
+				item->history()->peer,
+				passthrough)) {
 			continue;
 		}
 
@@ -1510,7 +1512,9 @@ void ApiWrap::markContentsRead(not_null<HistoryItem*> item) {
 	}
 
 	const auto &ghost = AyuSettings::ghost(&session());
-	if (!ghost.sendReadMessages() && !passthrough) {
+	if (!ghost.shouldSendReadMessages(
+			item->history()->peer,
+			passthrough)) {
 		return;
 	}
 

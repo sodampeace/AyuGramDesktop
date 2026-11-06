@@ -388,9 +388,9 @@ void Polls::sendVotes(
 		}
 		_session->updates().applyUpdates(result);
 		const auto &ghost = AyuSettings::ghost(_session);
-		if (!ghost.sendReadMessages()
-			&& ghost.markReadAfterAction()
-			&& item) {
+		if (item
+			&& !ghost.shouldSendReadMessages(item->history()->peer)
+			&& ghost.markReadAfterAction()) {
 			readHistory(item);
 		}
 	}).fail([=](const MTP::Error &error) {

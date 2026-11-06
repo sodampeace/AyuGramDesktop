@@ -156,6 +156,7 @@ set(ayugram_files
         ayu/ayu_state.h
         ayu/ayu_settings.cpp
         ayu/ayu_settings.h
+        ayu/ghost_mode_peer_exceptions.h
         ayu/ayu_lang.cpp
         ayu/ayu_lang.h
         ayu/features/eta/eta_watcher.cpp
@@ -1042,6 +1043,8 @@ PRIVATE
     data/data_types.h
     data/data_unread_value.cpp
     data/data_unread_value.h
+    data/data_unsent_read_generation.h
+    data/data_unsent_read_till.h
     data/data_user.cpp
     data/data_user.h
     data/data_user_photos.cpp
