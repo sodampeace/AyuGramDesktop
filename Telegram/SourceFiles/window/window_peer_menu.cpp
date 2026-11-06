@@ -1914,6 +1914,8 @@ void Filler::fillContextMenuActions() {
 	addToggleUnreadMark();
 	addToggleTopicClosed();
 	addToggleFolder();
+	AyuUi::AddLocalSearchBackfillAction(_peer, _controller, _addAction);
+	AyuUi::AddChatExclusionActions(_peer, _controller, _addAction);
 	if (const auto user = _peer->asUser()) {
 		if (!user->isContact()) {
 			addBlockUser();
@@ -1934,6 +1936,8 @@ void Filler::fillHistoryActions() {
 	addInfo();
 	AyuUi::AddJumpToBeginningAction(_peer, _thread, _controller, _addAction);
 	AyuUi::AddOpenChannelAction(_peer, _controller, _addAction);
+	AyuUi::AddLocalSearchBackfillAction(_peer, _controller, _addAction);
+	AyuUi::AddChatExclusionActions(_peer, _controller, _addAction);
 	addViewAsTopics();
 	addManageChat();
 	addStoryArchive();

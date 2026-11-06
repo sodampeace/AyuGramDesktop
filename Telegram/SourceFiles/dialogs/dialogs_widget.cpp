@@ -3855,11 +3855,124 @@ void Widget::searchReceived(
 		process->full = true;
 		return std::vector<not_null<HistoryItem*>>();
 	});
+	if (!type.posts
+		&& !type.migrated
+		&& AyuLocalSearch::Wanted(_searchQuery)
+		&& (type.peer || _searchState.tab == ChatSearchTab::MyMessages)) {
+		mergeLocalSearchResults(
+			type,
+			std::move(messages),
+			inject,
+			fullCount,
+			process);
+		return;
+	}
 	_inner->searchReceived(messages, inject, type, fullCount);
 
 	process->requestId = 0;
 	listScrollUpdated();
 	update();
+}
+
+// Mixes local index hits into a page of server results, newest first.
+// A local hit is shown on the page whose date range covers it, so later
+// server pages keep the order and nothing is listed twice.
+void Widget::mergeLocalSearchResults(
+		SearchRequestType type,
+		std::vector<not_null<HistoryItem*>> messages,
+		HistoryItem *inject,
+		int fullCount,
+		not_null<SearchProcessState*> process) {
+	constexpr auto kLocalLimit = 300;
+	const auto inPeer = searchInPeer();
+	const auto inPeerId = inPeer ? inPeer->id : PeerId();
+	auto &local = _localSearch;
+	if (type.start
+		|| local.query != _searchQuery
+		|| local.inPeer != inPeerId) {
+		local.query = _searchQuery;
+		local.inPeer = inPeerId;
+		local.pending = AyuLocalSearch::Search(
+			&session(),
+			_searchQuery,
+			inPeerId,
+			kLocalLimit);
+		local.shown.clear();
+		++local.generation;
+	}
+	for (const auto &item : messages) {
+		local.shown.emplace(item->fullId());
+	}
+	if (inject) {
+		local.shown.emplace(inject->fullId());
+	}
+	const auto oldest = messages.empty() ? TimeId() : messages.back()->date();
+	auto take = std::vector<FullMsgId>();
+	for (auto i = local.pending.begin(); i != local.pending.end();) {
+		if (local.shown.contains(i->id)) {
+			i = local.pending.erase(i);
+		} else if (process->full || messages.empty() || i->date >= oldest) {
+			local.shown.emplace(i->id);
+			take.push_back(i->id);
+			i = local.pending.erase(i);
+		} else {
+			++i;
+		}
+	}
+	const auto generation = local.generation;
+	auto deliver = [=, messages = std::move(messages)]() mutable {
+		if (_localSearch.generation != generation
+			|| _searchQuery != _localSearch.query) {
+			return;
+		}
+		auto added = 0;
+		for (const auto &id : take) {
+			if (const auto item = session().data().message(id)) {
+				messages.push_back(item);
+				++added;
+			}
+		}
+		ranges::stable_sort(messages, ranges::greater(), [](
+				not_null<HistoryItem*> item) {
+			return item->date();
+		});
+		_inner->searchReceived(messages, inject, type, fullCount + added);
+		process->requestId = 0;
+		listScrollUpdated();
+		update();
+	};
+	auto missing = std::vector<FullMsgId>();
+	for (const auto &id : take) {
+		if (!session().data().message(id)) {
+			missing.push_back(id);
+		}
+	}
+	if (missing.empty()) {
+		deliver();
+		return;
+	}
+	// Keep the request marked as running until the messages arrive.
+	process->requestId = process->requestId ? process->requestId : -1;
+	const auto left = std::make_shared<int>(int(missing.size()));
+	const auto once = std::make_shared<Fn<void()>>(std::move(deliver));
+	const auto finish = [=] {
+		if (*once) {
+			const auto callback = base::take(*once);
+			callback();
+		}
+	};
+	for (const auto &id : missing) {
+		const auto peer = session().data().peerLoaded(id.peer);
+		if (!peer) {
+			if (!--*left) finish();
+			continue;
+		}
+		session().api().requestMessageData(peer, id.msg, crl::guard(this, [=] {
+			if (!--*left) finish();
+		}));
+	}
+	// Never let a stuck request hide the server results.
+	base::call_delayed(3000, this, finish);
 }
 
 void Widget::peerSearchReceived(Api::PeerSearchResult result) {

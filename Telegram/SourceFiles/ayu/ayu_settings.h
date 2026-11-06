@@ -288,6 +288,16 @@ public:
 	[[nodiscard]] bool isShadowBanned(const int64 id) const { return _shadowBanIds.contains(id); }
 	[[nodiscard]] const std::unordered_set<int64> &shadowBanIds() const { return _shadowBanIds; }
 
+	// Chats (dialog ids, see getDialogIdFromPeer) whose deleted messages are
+	// not kept, and chats left out of the local Korean search index.
+	void setDeletedSaveExcludedIds(std::unordered_set<int64> ids);
+	[[nodiscard]] bool isDeletedSaveExcluded(const int64 id) const { return _deletedSaveExcludedIds.contains(id); }
+	[[nodiscard]] const std::unordered_set<int64> &deletedSaveExcludedIds() const { return _deletedSaveExcludedIds; }
+	void setSearchIndexExcludedIds(std::unordered_set<int64> ids);
+	[[nodiscard]] bool isSearchIndexExcluded(const int64 id) const { return _searchIndexExcludedIds.contains(id); }
+	[[nodiscard]] const std::unordered_set<int64> &searchIndexExcludedIds() const { return _searchIndexExcludedIds; }
+	[[nodiscard]] rpl::producer<> exclusionsChanged() const { return _exclusionsChanged.events(); }
+
 	void addHiddenFolder(int64 id);
 	void removeHiddenFolder(int64 id);
 	[[nodiscard]] bool isFolderHidden(const int64 id) const { return _hiddenFolderIds.contains(id); }
@@ -678,6 +688,9 @@ private:
 	rpl::variable<bool> _saveForBots = false;
 	rpl::variable<bool> _mcpEnabled = false;
 	std::unordered_set<int64> _shadowBanIds;
+	std::unordered_set<int64> _deletedSaveExcludedIds;
+	std::unordered_set<int64> _searchIndexExcludedIds;
+	rpl::event_stream<> _exclusionsChanged;
 	std::unordered_set<int64> _hiddenFolderIds;
 	rpl::event_stream<> _hiddenFolderIdsChanged;
 	rpl::variable<bool> _filtersEnabled = false;

@@ -231,11 +231,33 @@ const List *IndexedList::filtered(QChar ch) const {
 	return &list;
 }
 
+namespace {
+
+// Korean names are often written without spaces ("한국에서봤어요"),
+// so a Hangul query word has to match anywhere inside a name word.
+[[nodiscard]] bool HasHangul(const QString &word) {
+	for (const auto ch : word) {
+		const auto code = ch.unicode();
+		if ((code >= 0xAC00 && code <= 0xD7A3)
+			|| (code >= 0x1100 && code <= 0x11FF)
+			|| (code >= 0x3130 && code <= 0x318F)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+} // namespace
+
 std::vector<not_null<Row*>> IndexedList::filtered(
 		const QStringList &words) const {
+	const auto hangul = ranges::any_of(words, HasHangul);
 	const auto minimal = [&]() -> const Dialogs::List* {
 		if (empty()) {
 			return nullptr;
+		} else if (hangul) {
+			// The first-letter index can't find mid-word matches.
+			return &_list;
 		}
 		auto result = (const Dialogs::List*)nullptr;
 		for (const auto &word : words) {
@@ -259,8 +281,9 @@ std::vector<not_null<Row*>> IndexedList::filtered(
 	for (const auto &row : *minimal) {
 		const auto &nameWords = row->entry()->chatListNameWords();
 		const auto found = [&](const QString &word) {
+			const auto anywhere = hangul && HasHangul(word);
 			for (const auto &name : nameWords) {
-				if (name.startsWith(word)) {
+				if (anywhere ? name.contains(word) : name.startsWith(word)) {
 					return true;
 				}
 			}

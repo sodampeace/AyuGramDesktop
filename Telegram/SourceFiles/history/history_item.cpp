@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/history_item.h"
 
+#include "ayu/features/local_search/local_search.h"
+
 #include "api/api_premium.h"
 #include "api/api_sensitive_content.h"
 #include "api/api_transcribes.h"
@@ -2530,6 +2532,7 @@ void HistoryItem::applyEdition(HistoryMessageEdition &&edition) {
 	}
 
 	finishEdition(keyboardTop);
+	AyuLocalSearch::Index(this);
 }
 
 void HistoryItem::applyChanges(not_null<Data::Story*> story) {

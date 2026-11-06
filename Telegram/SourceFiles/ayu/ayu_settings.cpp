@@ -480,6 +480,20 @@ void AyuSettings::removeShadowBan(int64 id) {
 	}
 }
 
+void AyuSettings::setDeletedSaveExcludedIds(std::unordered_set<int64> ids) {
+	if (_deletedSaveExcludedIds == ids) return;
+	_deletedSaveExcludedIds = std::move(ids);
+	_exclusionsChanged.fire({});
+	save();
+}
+
+void AyuSettings::setSearchIndexExcludedIds(std::unordered_set<int64> ids) {
+	if (_searchIndexExcludedIds == ids) return;
+	_searchIndexExcludedIds = std::move(ids);
+	_exclusionsChanged.fire({});
+	save();
+}
+
 void AyuSettings::addHiddenFolder(int64 id) {
 	if (_hiddenFolderIds.insert(id).second) {
 		_hiddenFolderIdsChanged.fire({});
@@ -1135,6 +1149,8 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		{"saveForBots", s._saveForBots.current()},
 		{"mcpEnabled", s._mcpEnabled.current()},
 		{"shadowBanIds", s._shadowBanIds},
+		{"deletedSaveExcludedIds", s._deletedSaveExcludedIds},
+		{"searchIndexExcludedIds", s._searchIndexExcludedIds},
 		{"hiddenFolderIds", s._hiddenFolderIds},
 		{"filtersEnabled", s._filtersEnabled.current()},
 		{"filtersEnabledInChats", s._filtersEnabledInChats.current()},
@@ -1246,6 +1262,8 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 	s._saveForBots = j.value("saveForBots", defaults._saveForBots.current());
 	s._mcpEnabled = j.value("mcpEnabled", defaults._mcpEnabled.current());
 	s._shadowBanIds = j.value("shadowBanIds", defaults._shadowBanIds);
+	s._deletedSaveExcludedIds = j.value("deletedSaveExcludedIds", defaults._deletedSaveExcludedIds);
+	s._searchIndexExcludedIds = j.value("searchIndexExcludedIds", defaults._searchIndexExcludedIds);
 	s._hiddenFolderIds = j.value("hiddenFolderIds", defaults._hiddenFolderIds);
 	s._filtersEnabled = j.value("filtersEnabled", defaults._filtersEnabled.current());
 	s._filtersEnabledInChats = j.value("filtersEnabledInChats", defaults._filtersEnabledInChats.current());

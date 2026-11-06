@@ -1045,6 +1045,7 @@ mac:
         -D CMAKE_DISABLE_FIND_PACKAGE_TIFF=TRUE \\
         -D CMAKE_DISABLE_FIND_PACKAGE_JPEG=TRUE \\
         -D CMAKE_DISABLE_FIND_PACKAGE_PNG=TRUE \\
+        -D WITH_GDK_PIXBUF=OFF \\
         -D WITH_EXAMPLES=OFF
     cmake --build . --config MinSizeRel
     cmake --install . --config MinSizeRel

@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "boxes/peer_list_box.h"
 
+#include "ayu/features/local_search/local_search.h"
+
 #include "boxes/peer_list_section_headers.h"
 #include "boxes/peer_list_section_index.h"
 #include "history/history.h" // chatListNameSortKey.
@@ -2440,7 +2442,19 @@ void PeerListContent::searchQueryChanged(QString query) {
 			Assert(_hiddenRows.empty() || _ignoreHiddenRowsOnSearch);
 
 			auto minimalList = (const std::vector<not_null<PeerListRow*>>*)nullptr;
-			for (const auto &searchWord : searchWordsList) {
+			// Korean names often have no spaces, so a Hangul word has to
+			// match anywhere inside a name word, not only at its start.
+			const auto hangul = ranges::any_of(
+				searchWordsList,
+				AyuLocalSearch::Wanted);
+			auto allRows = std::vector<not_null<PeerListRow*>>();
+			if (hangul) {
+				allRows.reserve(_rows.size());
+				for (const auto &row : _rows) {
+					allRows.push_back(row.get());
+				}
+			}
+			for (const auto &searchWord : (hangul ? QStringList() : searchWordsList)) {
 				auto searchWordStart = searchWord[0].toLower();
 				auto it = _searchIndex.find(searchWordStart);
 				if (it == _searchIndex.cend()) {
@@ -2451,12 +2465,18 @@ void PeerListContent::searchQueryChanged(QString query) {
 					minimalList = &it->second;
 				}
 			}
+			if (hangul) {
+				minimalList = &allRows;
+			}
 			if (minimalList) {
 				auto searchWordInNames = [](
 						not_null<PeerListRow*> row,
 						const QString &searchWord) {
+					const auto anywhere = AyuLocalSearch::Wanted(searchWord);
 					for (auto &nameWord : row->generateNameWords()) {
-						if (nameWord.startsWith(searchWord)) {
+						if (anywhere
+							? nameWord.contains(searchWord)
+							: nameWord.startsWith(searchWord)) {
 							return true;
 						}
 					}

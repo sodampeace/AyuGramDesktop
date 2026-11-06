@@ -158,6 +158,12 @@ set(ayugram_files
         ayu/ayu_settings.h
         ayu/ayu_lang.cpp
         ayu/ayu_lang.h
+        ayu/features/eta/eta_watcher.cpp
+        ayu/features/local_search/local_search.cpp
+        ayu/features/local_search/local_search.h
+        ayu/features/exclusions/chat_exclusions.cpp
+        ayu/features/exclusions/chat_exclusions.h
+        ayu/features/eta/eta_watcher.h
         ayu/ayu_infra.cpp
         ayu/ayu_infra.h
         ayu/utils/ayu_mapper.cpp

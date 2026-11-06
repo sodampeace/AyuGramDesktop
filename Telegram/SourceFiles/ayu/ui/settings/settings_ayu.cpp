@@ -9,6 +9,7 @@
 #include "lang_auto.h"
 #include "base/event_filter.h"
 #include "ayu/ayu_settings.h"
+#include "ayu/features/exclusions/chat_exclusions.h"
 #include "ayu/mcp/mcp_server.h"
 #include "ayu/ui/ayu_userpic.h"
 #include "ayu/ui/settings/ayu_builder.h"
@@ -651,6 +652,44 @@ void BuildGhostEssentials(SectionBuilder &builder) {
 	});
 }
 
+void AddExclusionsButton(
+		SectionBuilder &builder,
+		AyuExclusions::Kind kind,
+		QString id,
+		rpl::producer<QString> title) {
+	const auto controller = builder.controller();
+	auto &settings = AyuSettings::getInstance();
+	auto count = rpl::single(rpl::empty) | rpl::then(
+		settings.exclusionsChanged()
+	) | rpl::map([=] {
+		const auto &s = AyuSettings::getInstance();
+		const auto size = (kind == AyuExclusions::Kind::DeletedMessages)
+			? s.deletedSaveExcludedIds().size()
+			: s.searchIndexExcludedIds().size();
+		return size ? QString::number(size) : QString();
+	});
+	builder.addButton({
+		.id = id,
+		.title = std::move(title),
+		.st = &st::settingsButtonNoIcon,
+		.label = std::move(count),
+		.onClick = [=] {
+			if (controller) {
+				AyuExclusions::ShowBox(controller, kind);
+			}
+		},
+	});
+}
+
+void BuildLocalSearch(SectionBuilder &builder) {
+	builder.addSubsectionTitle(tr::ayu_LocalSearchHeader());
+	AddExclusionsButton(
+		builder,
+		AyuExclusions::Kind::SearchIndex,
+		u"ayu/searchIndexExcluded"_q,
+		tr::ayu_ExcludedSearchButton());
+}
+
 void BuildSpyEssentials(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 	builder.addSubsectionTitle(tr::ayu_SpyEssentialsHeader());
 
@@ -660,6 +699,11 @@ void BuildSpyEssentials(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 		.getter = &AyuSettings::saveDeletedMessages,
 		.setter = &AyuSettings::setSaveDeletedMessages,
 	});
+	AddExclusionsButton(
+		builder,
+		AyuExclusions::Kind::DeletedMessages,
+		u"ayu/deletedSaveExcluded"_q,
+		tr::ayu_ExcludedDeletedButton());
 	ayu.addSettingToggle({
 		.id = u"ayu/saveMessagesHistory"_q,
 		.title = tr::ayu_SaveMessagesHistory(),
@@ -1064,6 +1108,9 @@ const auto kMeta = BuildHelper({
 
 	builder.addSkip();
 	BuildSpyEssentials(builder, ayu);
+
+	ayu.addSectionDivider();
+	BuildLocalSearch(builder);
 
 	ayu.addSectionDivider();
 	BuildSTT(builder, ayu);

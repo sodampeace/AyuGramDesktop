@@ -32,5 +32,6 @@
         <file alias="icons/ayu/donates/solana.svg">../../icons/ayu/donates/solana.svg</file>
         <file alias="icons/ayu/donates/tron.svg">../../icons/ayu/donates/tron.svg</file>
         <file alias="icons/ayu/donates/support_logo.svg">../../icons/ayu/donates/support_logo.svg</file>
+        <file alias="langs/ayu/ko.json">../../langs/ayu/ko.json</file>
     </qresource>
 </RCC>

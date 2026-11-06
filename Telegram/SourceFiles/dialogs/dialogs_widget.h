@@ -16,6 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/userpic_view.h"
 #include "mtproto/sender.h"
 #include "api/api_single_message_search.h"
+#include "ayu/features/local_search/local_search.h"
 
 class ChannelData;
 
@@ -427,6 +428,22 @@ private:
 	mtpRequestId _topicSearchRequest = 0;
 
 	QString _searchQuery;
+
+	// AyuGram: local substring results for Korean queries.
+	struct LocalSearch {
+		QString query;
+		PeerId inPeer = 0;
+		std::vector<AyuLocalSearch::Result> pending;
+		base::flat_set<FullMsgId> shown;
+		int generation = 0;
+	};
+	void mergeLocalSearchResults(
+		SearchRequestType type,
+		std::vector<not_null<HistoryItem*>> messages,
+		HistoryItem *inject,
+		int fullCount,
+		not_null<SearchProcessState*> process);
+	LocalSearch _localSearch;
 	PeerData *_searchQueryFrom = nullptr;
 	std::vector<Data::ReactionId> _searchQueryTags;
 	ChatSearchTab _searchQueryTab = {};

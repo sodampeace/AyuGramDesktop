@@ -5,6 +5,8 @@
 //
 // Copyright @Radolyn, 2026
 #include "ayu/ui/context_menu/context_menu.h"
+#include "ayu/features/local_search/local_search.h"
+#include "ayu/features/exclusions/chat_exclusions.h"
 
 #include "apiwrap.h"
 #include "lang_auto.h"
@@ -427,6 +429,79 @@ void AddOpenChannelAction(PeerData *peerData,
 			sessionController->showPeerHistory(chat, Window::SectionShow::Way::Forward);
 		},
 		&st::menuIconChannel);
+}
+
+// Downloads a chat's whole history into the local Korean search index.
+void AddLocalSearchBackfillAction(PeerData *peerData,
+								  not_null<Window::SessionController*> sessionController,
+								  const Window::PeerMenuCallback &addCallback) {
+	if (!peerData) {
+		return;
+	}
+	const auto peer = not_null(peerData);
+	if (AyuExclusions::IsExcluded(AyuExclusions::Kind::SearchIndex, peer)) {
+		return;
+	} else if (AyuLocalSearch::BackfillRunning(peer)) {
+		addCallback(
+			tr::ayu_LocalSearchBackfillStop(tr::now),
+			[=] { AyuLocalSearch::CancelBackfill(peer); },
+			&st::menuIconSearch);
+		return;
+	}
+	const auto weak = base::make_weak(sessionController);
+	addCallback(
+		tr::ayu_LocalSearchBackfill(tr::now),
+		[=]
+		{
+			sessionController->showToast(
+				tr::ayu_LocalSearchBackfillStarted(tr::now));
+			const auto count = std::make_shared<int>(0);
+			AyuLocalSearch::Backfill(peer, [=](int indexed) {
+				*count = indexed;
+			}, [=] {
+				if (const auto strong = weak.get()) {
+					strong->showToast(tr::ayu_LocalSearchBackfillDone(
+						tr::now,
+						lt_item,
+						QString::number(*count)));
+				}
+			});
+		},
+		&st::menuIconSearch);
+}
+
+void AddChatExclusionActions(PeerData *peerData,
+							 not_null<Window::SessionController*> sessionController,
+							 const Window::PeerMenuCallback &addCallback) {
+	if (!peerData) {
+		return;
+	}
+	using Kind = AyuExclusions::Kind;
+	const auto peer = not_null(peerData);
+	const auto weak = base::make_weak(sessionController);
+	const auto add = [&](Kind kind, QString exclude, QString include, const style::icon *icon) {
+		const auto excluded = AyuExclusions::IsExcluded(kind, peer);
+		addCallback(excluded ? include : exclude, [=] {
+			AyuExclusions::SetExcluded(kind, peer, !excluded);
+			if (const auto strong = weak.get()) {
+				strong->showToast(excluded
+					? tr::ayu_ExcludedToastOff(tr::now)
+					: tr::ayu_ExcludedToastOn(tr::now));
+			}
+		}, icon);
+	};
+	if (AyuSettings::getInstance().saveDeletedMessages()) {
+		add(
+			Kind::DeletedMessages,
+			tr::ayu_ExcludeDeletedAction(tr::now),
+			tr::ayu_IncludeDeletedAction(tr::now),
+			&st::menuIconRestore);
+	}
+	add(
+		Kind::SearchIndex,
+		tr::ayu_ExcludeSearchAction(tr::now),
+		tr::ayu_IncludeSearchAction(tr::now),
+		&st::menuIconSearch);
 }
 
 void AddShadowBanAction(PeerData *peerData,

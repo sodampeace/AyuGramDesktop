@@ -11,6 +11,7 @@
 #include "ayu/ayu_ui_settings.h"
 #include "ayu/ayu_worker.h"
 #include "ayu/data/ayu_database.h"
+#include "ayu/features/eta/eta_watcher.h"
 #include "ayu/mcp/mcp_server.h"
 #include "ayu/mcp/tools/mcp_tools.h"
 #include "ayu/ui/ayu_logo.h"
@@ -76,6 +77,7 @@ void init() {
 	initRCManager();
 	initTranslator();
 	initMcp();
+	AyuEta::start();
 }
 
 }

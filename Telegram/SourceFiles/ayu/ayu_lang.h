@@ -27,6 +27,7 @@ private:
 	AyuLanguage();
 	~AyuLanguage() override = default;
 
+	bool loadBundledLanguage();
 	void loadCachedLanguage();
 	void syncLanguage();
 	void fetchLanguage(const QString &id, bool mirror = false);

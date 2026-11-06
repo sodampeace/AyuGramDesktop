@@ -100,8 +100,26 @@ void AyuLanguage::syncLanguage() {
 	_baseLangId = baseId;
 	_document = QJsonDocument();
 	if (id.isEmpty() || id == u"en"_q) return;
+	if (loadBundledLanguage()) return;
 	loadCachedLanguage();
 	fetchLanguage(id);
+}
+
+// Translations shipped inside the app (e.g. Korean, which upstream lacks).
+// When one exists it wins over the CDN copy, so no network request is made.
+bool AyuLanguage::loadBundledLanguage() {
+	for (const auto &id : { _currentLangId, _baseLangId }) {
+		if (id.isEmpty()) continue;
+		QFile file(u":/gui/langs/ayu/%1.json"_q.arg(id));
+		if (!file.open(QIODevice::ReadOnly)) continue;
+		const auto doc = QJsonDocument::fromJson(file.readAll());
+		if (!ValidLanguage(doc)) continue;
+		_document = doc;
+		LOG(("Loading bundled AyuGram language: %1").arg(id));
+		applyLanguageJson(doc);
+		return true;
+	}
+	return false;
 }
 
 QString AyuLanguage::getCacheDir() const {
