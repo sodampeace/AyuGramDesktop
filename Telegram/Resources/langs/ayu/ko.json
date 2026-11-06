@@ -514,7 +514,7 @@
   "SttHardwareAccelerationUnavailable": "이 기기에서 쓸 수 있는 GPU 가속이 없어요.",
   "SttHardwareAccelerationDescription": "GPU로 음성 인식 속도를 높여요. 처음 쓸 때 추가 모듈을 다운로드해요. 끄면 인식이 매우 느려요.",
   "LocalSearchBackfill": "검색용 기록 받기",
-  "LocalSearchBackfillStop": "기록 받기 중지",
+  "LocalSearchBackfillStop": "기록 받기 일시정지",
   "LocalSearchBackfillStarted": "백그라운드에서 이 채팅의 기록을 받고 있어요. 그동안 계속 쓸 수 있어요.",
   "LocalSearchBackfillDone": "검색용으로 메시지 {item}개를 저장했어요.",
   "ExcludedDeletedButton": "삭제된 메시지 저장 안 할 채팅",

@@ -56,9 +56,73 @@ public:
 			return;
 		}
 		sqlite3_stmt *statement = nullptr;
-		const auto sql = "DELETE FROM messages WHERE peer = ?";
+		for (const auto sql : {
+				"DELETE FROM messages WHERE peer = ?",
+				"DELETE FROM backfill WHERE peer = ?" }) {
+			if (sqlite3_prepare_v2(_db, sql, -1, &statement, nullptr) == SQLITE_OK) {
+				sqlite3_bind_int64(statement, 1, peer);
+				sqlite3_step(statement);
+				sqlite3_finalize(statement);
+			}
+			statement = nullptr;
+		}
+	}
+
+	struct Progress {
+		int64 offsetId = 0;
+		bool done = false;
+	};
+
+	// Saved progress, or a guess for chats downloaded before progress was
+	// saved: the oldest indexed message, when there are many of them.
+	[[nodiscard]] Progress progress(int64 account, int64 peer) {
+		flush();
+		auto result = Progress();
+		if (!_db) {
+			return result;
+		}
+		sqlite3_stmt *statement = nullptr;
+		const auto sql = "SELECT offset_id, done FROM backfill"
+			" WHERE account = ? AND peer = ?";
 		if (sqlite3_prepare_v2(_db, sql, -1, &statement, nullptr) == SQLITE_OK) {
-			sqlite3_bind_int64(statement, 1, peer);
+			sqlite3_bind_int64(statement, 1, account);
+			sqlite3_bind_int64(statement, 2, peer);
+			if (sqlite3_step(statement) == SQLITE_ROW) {
+				result.offsetId = sqlite3_column_int64(statement, 0);
+				result.done = sqlite3_column_int64(statement, 1) != 0;
+				sqlite3_finalize(statement);
+				return result;
+			}
+			sqlite3_finalize(statement);
+		}
+		constexpr auto kGuessMinimum = 500;
+		const auto guess = "SELECT MIN(id), COUNT(*) FROM messages"
+			" WHERE account = ? AND peer = ?";
+		if (sqlite3_prepare_v2(_db, guess, -1, &statement, nullptr) == SQLITE_OK) {
+			sqlite3_bind_int64(statement, 1, account);
+			sqlite3_bind_int64(statement, 2, peer);
+			if (sqlite3_step(statement) == SQLITE_ROW
+				&& sqlite3_column_int64(statement, 1) >= kGuessMinimum) {
+				result.offsetId = sqlite3_column_int64(statement, 0);
+			}
+			sqlite3_finalize(statement);
+		}
+		return result;
+	}
+
+	void saveProgress(int64 account, int64 peer, int64 offsetId, bool done) {
+		flush(); // Messages first, so saved progress never runs ahead.
+		if (!_db) {
+			return;
+		}
+		sqlite3_stmt *statement = nullptr;
+		const auto sql = "INSERT OR REPLACE INTO backfill"
+			" (account, peer, offset_id, done) VALUES (?, ?, ?, ?)";
+		if (sqlite3_prepare_v2(_db, sql, -1, &statement, nullptr) == SQLITE_OK) {
+			sqlite3_bind_int64(statement, 1, account);
+			sqlite3_bind_int64(statement, 2, peer);
+			sqlite3_bind_int64(statement, 3, offsetId);
+			sqlite3_bind_int(statement, 4, done ? 1 : 0);
 			sqlite3_step(statement);
 			sqlite3_finalize(statement);
 		}
@@ -100,6 +164,11 @@ private:
 			"PRIMARY KEY (account, peer, id)) WITHOUT ROWID");
 		exec("CREATE INDEX IF NOT EXISTS messages_date "
 			"ON messages (account, date)");
+		// Where each chat's history download stopped, so it can resume.
+		exec("CREATE TABLE IF NOT EXISTS backfill ("
+			"account INTEGER NOT NULL, peer INTEGER NOT NULL, "
+			"offset_id INTEGER NOT NULL, done INTEGER NOT NULL, "
+			"PRIMARY KEY (account, peer)) WITHOUT ROWID");
 	}
 
 	void exec(const char *sql) {
@@ -280,11 +349,22 @@ void BackfillNext(not_null<PeerData*> peer) {
 		if (state->progress) {
 			state->progress(state->indexed);
 		}
+		const auto account = int64(session->userId().bare);
 		if (!count || !lowest || (state->offsetId && lowest >= state->offsetId)) {
+			Database::Instance().saveProgress(
+				account,
+				int64(peer->id.value),
+				int64(state->offsetId.bare),
+				true);
 			BackfillFinish(peer);
 			return;
 		}
 		state->offsetId = lowest;
+		Database::Instance().saveProgress(
+			account,
+			int64(peer->id.value),
+			int64(lowest.bare),
+			false);
 		state->timer.callOnce(kBackfillDelay);
 	}).fail([=](const MTP::Error &error) {
 		state->requestId = 0;
@@ -401,7 +481,20 @@ void Backfill(
 	}
 	// The session (and the peer with it) can go away mid-download.
 	peer->session().lifetime().add([=] { Backfills.erase(peer); });
+	const auto saved = Database::Instance().progress(
+		int64(peer->session().userId().bare),
+		int64(peer->id.value));
+	if (saved.done) {
+		// Already complete; newer messages get indexed as they arrive.
+		crl::on_main(&peer->session(), [=] {
+			if (done) {
+				done();
+			}
+		});
+		return;
+	}
 	auto state = std::make_unique<BackfillState>(peer);
+	state->offsetId = MsgId(saved.offsetId);
 	state->progress = std::move(progress);
 	state->done = std::move(done);
 	state->timer.setCallback([=] { BackfillNext(peer); });

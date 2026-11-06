@@ -9221,7 +9221,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_SttHardwareAccelerationUnavailable" = "No supported GPU acceleration backend detected on this device.";
 "ayu_SttHardwareAccelerationDescription" = "Uses your GPU to speed up transcription. Downloads an extra module on first use. Without it, recognition will be very slow.";
 "ayu_LocalSearchBackfill" = "Download history for search";
-"ayu_LocalSearchBackfillStop" = "Stop downloading history";
+"ayu_LocalSearchBackfillStop" = "Pause downloading history";
 "ayu_LocalSearchBackfillStarted" = "Downloading this chat's history in the background. You can keep using Telegram.";
 "ayu_LocalSearchBackfillDone" = "Saved {item} messages for search.";
 "ayu_LocalSearchFolderStarted#one" = "Downloading the history of {count} chat in the background.";
