@@ -530,5 +530,8 @@
   "ExcludedToastOn": "이제 이 채팅은 저장하지 않아요.",
   "ExcludedToastOff": "이 채팅을 다시 저장해요.",
   "LocalSearchFolderStarted_one": "채팅 %1$d개의 기록을 백그라운드에서 받고 있어요.",
-  "LocalSearchFolderStarted_other": "채팅 %1$d개의 기록을 백그라운드에서 차례로 받고 있어요."
+  "LocalSearchFolderStarted_other": "채팅 %1$d개의 기록을 백그라운드에서 차례로 받고 있어요.",
+  "GhostAlwaysSendReadsAndActivity": "읽음·활동 항상 보내기",
+  "GhostUseDefaultsForTrustedChat": "고스트 모드 기본값 사용",
+  "ChatListCompact": "채팅 목록 촘촘하게 보기"
 }
